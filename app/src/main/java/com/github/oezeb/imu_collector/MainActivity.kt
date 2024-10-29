@@ -10,7 +10,6 @@ import android.os.Handler
 import android.os.Looper
 import android.text.InputFilter
 import android.text.Spanned
-import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -159,7 +158,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {
-        Log.d("Sensor", "Accuracy changed: $accuracy")
+//        Log.d("Sensor", "Accuracy changed: $accuracy")
     }
 
     override fun onSensorChanged(event: SensorEvent) {
