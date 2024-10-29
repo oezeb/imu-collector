@@ -6,10 +6,10 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.os.CountDownTimer
 import android.text.InputFilter
 import android.text.Spanned
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -21,14 +21,10 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
-import java.util.Timer
-import java.util.TimerTask
 
 
 class MainActivity : AppCompatActivity(), SensorEventListener {
-    private val handler = Handler(Looper.getMainLooper())
     private lateinit var sensorManager: SensorManager
-    private lateinit var timer: Timer
     private lateinit var accView: TextView
     private lateinit var gyrView: TextView
     private lateinit var magView: TextView
@@ -91,58 +87,46 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
-    class Task(private var duration: Int, private var callback: (duration: Int) -> Unit): TimerTask() {
-        override fun run() {
-            duration -= 1
-            callback(duration)
-        }
-    }
-
     private fun record() {
         arrayOf(btnView, hourView, minView, secView).forEach { view ->
             view.isEnabled = false
         }
-        accFile = createFile("acc.txt")
-        gyrFile = createFile("gyr.txt")
-        magFile = createFile("mag.txt")
 
         val h = hourView.text.toString()
         val m = minView.text.toString()
         val s = secView.text.toString()
 
-        val hh = if (h == "") 0 else h.toInt()
-        val mm = if (m == "") 0 else m.toInt()
-        val ss = if (s == "") 5 else s.toInt()
+        var hh = if (h == "") 0 else h.toLong()
+        var mm = if (m == "") 0 else m.toLong()
+        var ss = if (s == "") 5 else s.toLong()
 
-        timer = Timer()
-        val task = Task(hh*3600+mm*60+ss) { timerCallback(it) }
-        timer.schedule(task, 0, 1000) // 1s == 1000ms
-    }
+        accFile = createFile("acc.txt")
+        gyrFile = createFile("gyr.txt")
+        magFile = createFile("mag.txt")
 
-    private fun timerCallback(duration: Int) {
-        if (duration <= 0) {
-            timer.cancel()
-            timer.purge()
-            accFile = null; gyrFile = null; magFile = null
-            handler.post {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        object : CountDownTimer((hh*3600+mm*60+ss)*1000, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                hh = millisUntilFinished / 1000
+                ss = hh % 60; hh /= 60
+                mm = hh % 60; hh /= 60
+
+                hourView.setText(String.format(Locale.CHINA, "%02d", hh))
+                minView.setText(String.format(Locale.CHINA, "%02d", mm))
+                secView.setText(String.format(Locale.CHINA, "%02d", ss))
+            }
+
+            override fun onFinish() {
+                accFile = null; gyrFile = null; magFile = null
                 hourView.setText("")
                 minView.setText("")
                 secView.setText("")
                 arrayOf(btnView, hourView, minView, secView).forEach { view ->
                     view.isEnabled = true
                 }
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
-        } else {
-            var hh = duration
-            val ss = hh % 60; hh /= 60
-            val mm = hh % 60; hh /= 60
-
-            handler.post {
-                hourView.setText(String.format(Locale.CHINA, "%02d", hh))
-                minView.setText(String.format(Locale.CHINA, "%02d", mm))
-                secView.setText(String.format(Locale.CHINA, "%02d", ss))
-            }
-        }
+        }.start()
     }
 
     private fun createFile(name: String): File {
