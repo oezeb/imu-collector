@@ -12,7 +12,8 @@ A lightweight Android application for collecting and logging Inertial Measuremen
 - Automated data recording with customizable duration
 - Configurable start delay (default 5s) with an on-screen countdown before recording begins
 - Vibration when recording starts and ends
-- In-app list of past recordings, with an Export button that zips a recording and opens the share sheet
+- In-app list of past recordings, with an Export button (zips a recording and opens the share sheet) and a Delete button (asks for confirmation)
+- Sensor metadata (name, vendor, resolution, range, etc.) saved alongside each recording
 
 ## Data Storage
 
@@ -23,7 +24,8 @@ recordings/
 └── YYYY-MM-DD HH-mm-ss.SSS/
     ├── acc.txt
     ├── gyr.txt
-    └── mag.txt
+    ├── mag.txt
+    └── sensors.json
 ```
 
 ### File Format

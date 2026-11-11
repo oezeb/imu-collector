@@ -15,6 +15,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.ListView
+import androidx.appcompat.app.AlertDialog
+import org.json.JSONObject
 import androidx.core.content.FileProvider
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -93,6 +95,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         btnView.setOnClickListener { record() }
     }
 
+    companion object {
+        const val SAMPLING_PERIOD_US = 20_000 // 50Hz==0.02s==20_000 μs
+    }
+
     class MinMaxFilter(private val min: Int, private val max: Int) : InputFilter {
         override fun filter(
             source: CharSequence?,
@@ -142,6 +148,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         accFile = File(dir, "acc.txt").apply { writeText("") }
         gyrFile = File(dir, "gyr.txt").apply { writeText("") }
         magFile = File(dir, "mag.txt").apply { writeText("") }
+        File(dir, "sensors.json").writeText(sensorInfoJson())
 
         object : CountDownTimer(durationMs, 1000) {
             override fun onTick(millisUntilFinished: Long) {
@@ -196,9 +203,44 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 val dir = getItem(position)!!
                 row.findViewById<TextView>(R.id.rec_name).text = dir.name
                 row.findViewById<Button>(R.id.rec_export).setOnClickListener { export(dir) }
+                row.findViewById<Button>(R.id.rec_delete).setOnClickListener { confirmDelete(dir) }
                 return row
             }
         }
+    }
+
+    private fun sensorInfoJson(): String {
+        val sensors = JSONObject()
+        mapOf("acc" to accSensor, "gyr" to gyrSensor, "mag" to magSensor).forEach { (key, s) ->
+            sensors.put(key, if (s == null) JSONObject.NULL else JSONObject().apply {
+                put("name", s.name)
+                put("vendor", s.vendor)
+                put("version", s.version)
+                put("type", s.stringType)
+                put("resolution", s.resolution.toDouble())
+                put("maxRange", s.maximumRange.toDouble())
+                put("powerMa", s.power.toDouble())
+                put("minDelayUs", s.minDelay)
+                put("requestedDelayUs", SAMPLING_PERIOD_US)
+            })
+        }
+        return JSONObject().apply {
+            put("device", "${Build.MANUFACTURER} ${Build.MODEL}")
+            put("androidSdk", Build.VERSION.SDK_INT)
+            put("sensors", sensors)
+        }.toString(2)
+    }
+
+    private fun confirmDelete(dir: File) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.delete)
+            .setMessage(getString(R.string.delete_confirm, dir.name))
+            .setPositiveButton(R.string.delete) { _, _ ->
+                dir.deleteRecursively()
+                refreshRecordings()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun export(dir: File) {
@@ -250,8 +292,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     override fun onResume() {
         super.onResume()
         arrayOf(accSensor, gyrSensor, magSensor).forEach { sensor ->
-            val rate = 20_000 // 50Hz==0.02s==20_000 μs
-            sensorManager.registerListener(this, sensor, rate)
+            sensorManager.registerListener(this, sensor, SAMPLING_PERIOD_US)
         }
     }
 
