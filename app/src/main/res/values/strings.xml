@@ -1,4 +1,8 @@
 <resources>
     <string name="app_name">imu-collector</string>
     <string name="record">Record</string>
+    <string name="export">Export</string>
+    <string name="recordings">Recordings</string>
+    <string name="start_delay">Start in (s)</string>
+    <string name="no_recordings">No recordings yet</string>
 </resources>

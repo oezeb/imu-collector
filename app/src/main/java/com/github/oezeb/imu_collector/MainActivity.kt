@@ -5,7 +5,19 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ArrayAdapter
+import android.widget.ListView
+import androidx.core.content.FileProvider
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import android.os.CountDownTimer
 import android.text.InputFilter
 import android.text.Spanned
@@ -32,6 +44,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var minView: EditText
     private lateinit var secView: EditText
     private lateinit var btnView: Button
+    private lateinit var delayView: EditText
+    private lateinit var statusView: TextView
+    private lateinit var listView: ListView
     private var accSensor: Sensor? = null
     private var gyrSensor: Sensor? = null
     private var magSensor: Sensor? = null
@@ -65,6 +80,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         minView = findViewById(R.id.min)
         secView = findViewById(R.id.sec)
         btnView = findViewById(R.id.record)
+        delayView = findViewById(R.id.delay)
+        statusView = findViewById(R.id.status)
+        listView = findViewById(R.id.recordings)
+        listView.emptyView = findViewById(android.R.id.empty)
+        refreshRecordings()
 
         hourView.filters = arrayOf(MinMaxFilter(0, 99))
         minView.filters = arrayOf(MinMaxFilter(0, 59))
@@ -88,30 +108,48 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun record() {
-        arrayOf(btnView, hourView, minView, secView).forEach { view ->
+        arrayOf(btnView, hourView, minView, secView, delayView).forEach { view ->
             view.isEnabled = false
         }
 
         val h = hourView.text.toString()
         val m = minView.text.toString()
         val s = secView.text.toString()
+        val d = delayView.text.toString()
 
-        var hh = if (h == "") 0 else h.toLong()
-        var mm = if (m == "") 0 else m.toLong()
-        var ss = if (s == "") 5 else s.toLong()
-
-        accFile = createFile("acc.txt")
-        gyrFile = createFile("gyr.txt")
-        magFile = createFile("mag.txt")
+        val hh = if (h == "") 0 else h.toLong()
+        val mm = if (m == "") 0 else m.toLong()
+        val ss = if (s == "") 5 else s.toLong()
+        val delay = if (d == "") 5 else d.toLong()
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        object : CountDownTimer((hh*3600+mm*60+ss)*1000, 1000) {
+        object : CountDownTimer(delay * 1000, 1000) {
             override fun onTick(millisUntilFinished: Long) {
-                hh = millisUntilFinished / 1000
-                ss = hh % 60; hh /= 60
-                mm = hh % 60; hh /= 60
+                statusView.text = "Starting in ${(millisUntilFinished + 999) / 1000}s"
+            }
 
-                hourView.setText(String.format(Locale.CHINA, "%02d", hh))
+            override fun onFinish() {
+                statusView.text = "Recording..."
+                startRecording((hh * 3600 + mm * 60 + ss) * 1000)
+            }
+        }.start()
+    }
+
+    private fun startRecording(durationMs: Long) {
+        vibrate(200)
+        val dir = File(recordingsDir(), getCurrentTime().replace(":", "-"))
+        dir.mkdirs()
+        accFile = File(dir, "acc.txt").apply { writeText("") }
+        gyrFile = File(dir, "gyr.txt").apply { writeText("") }
+        magFile = File(dir, "mag.txt").apply { writeText("") }
+
+        object : CountDownTimer(durationMs, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                var t = millisUntilFinished / 1000
+                val ss = t % 60; t /= 60
+                val mm = t % 60; t /= 60
+
+                hourView.setText(String.format(Locale.CHINA, "%02d", t))
                 minView.setText(String.format(Locale.CHINA, "%02d", mm))
                 secView.setText(String.format(Locale.CHINA, "%02d", ss))
             }
@@ -121,18 +159,65 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 hourView.setText("")
                 minView.setText("")
                 secView.setText("")
-                arrayOf(btnView, hourView, minView, secView).forEach { view ->
+                statusView.text = ""
+                arrayOf(btnView, hourView, minView, secView, delayView).forEach { view ->
                     view.isEnabled = true
                 }
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                vibrate(800)
+                refreshRecordings()
             }
         }.start()
     }
 
-    private fun createFile(name: String): File {
-        val file = File(this.externalCacheDir, getCurrentTime()+" "+name)
-        file.writeText("")
-        return file
+    @Suppress("DEPRECATION")
+    private fun vibrate(ms: Long) {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+        } else {
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            vibrator.vibrate(ms)
+        }
+    }
+
+    private fun recordingsDir(): File =
+        File(getExternalFilesDir(null), "recordings").apply { mkdirs() }
+
+    private fun refreshRecordings() {
+        val dirs = recordingsDir().listFiles { f -> f.isDirectory }
+            ?.sortedByDescending { it.name } ?: emptyList()
+        listView.adapter = object : ArrayAdapter<File>(this, R.layout.item_recording, R.id.rec_name, dirs) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val row = super.getView(position, convertView, parent)
+                val dir = getItem(position)!!
+                row.findViewById<TextView>(R.id.rec_name).text = dir.name
+                row.findViewById<Button>(R.id.rec_export).setOnClickListener { export(dir) }
+                return row
+            }
+        }
+    }
+
+    private fun export(dir: File) {
+        val exports = File(cacheDir, "exports").apply { mkdirs() }
+        val zip = File(exports, "${dir.name}.zip")
+        ZipOutputStream(zip.outputStream().buffered()).use { out ->
+            dir.listFiles()?.forEach { f ->
+                out.putNextEntry(ZipEntry(f.name))
+                f.inputStream().use { it.copyTo(out) }
+                out.closeEntry()
+            }
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", zip)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.export)))
     }
 
     private fun getCurrentTime() : String {

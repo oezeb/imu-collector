@@ -10,14 +10,20 @@ A lightweight Android application for collecting and logging Inertial Measuremen
   - Magnetometer (mag)
 - Real-time sensor data visualization
 - Automated data recording with customizable duration
+- Configurable start delay (default 5s) with an on-screen countdown before recording begins
+- Vibration when recording starts and ends
+- In-app list of past recordings, with an Export button that zips a recording and opens the share sheet
 
 ## Data Storage
 
-Files are saved in the app's external cache directory with the following format:
+Each recording is saved in its own folder in the app's external files directory
+(`Android/data/com.github.oezeb.imu_collector/files/recordings/`), named after the start time:
 ```
-YY-MM-DD HH:mm:ss.SSS acc.txt
-YY-MM-DD HH:mm:ss.SSS gyr.txt
-YY-MM-DD HH:mm:ss.SSS mag.txt
+recordings/
+└── YYYY-MM-DD HH-mm-ss.SSS/
+    ├── acc.txt
+    ├── gyr.txt
+    └── mag.txt
 ```
 
 ### File Format
